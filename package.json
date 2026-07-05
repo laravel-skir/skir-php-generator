@@ -26,6 +26,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "skir": "^1.2.19",
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"
   }

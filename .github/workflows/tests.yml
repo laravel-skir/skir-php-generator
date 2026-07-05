@@ -46,10 +46,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build
+        run: npm run build
+
       - name: Run tests
         run: npm test
         env:
           SKIR_RUNTIME_PATH: ${{ github.workspace }}/runtime
-
-      - name: Build
-        run: npm run build
