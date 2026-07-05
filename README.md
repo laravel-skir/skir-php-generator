@@ -57,19 +57,36 @@ $client = new SkirRpcClient(new TransportSkirClient('https://example.com/skir'))
 $user = $client->getUser($request);
 ```
 
-For servers, the generator emits `SkirProcedures.php` and `SkirProcedureProvider.php`. Implement the generated interface and register the generated provider on a Laravel Skir endpoint:
+For servers, the generator emits `AbstractSkirProcedures.php`, `SkirProcedures.php`, and `SkirProcedureProvider.php`.
+
+The recommended Laravel server path is to extend the generated abstract class and register your concrete procedure class directly:
 
 ```php
-use App\Skir\Admin\SkirProcedureProvider;
-use App\Skir\Admin\SkirProcedures;
+use App\Skir\Admin\AbstractSkirProcedures;
+use App\Skir\Admin\GetUserRequest;
+use App\Skir\Admin\User;
 use Illuminate\Support\Facades\Route;
+use LaravelSkir\Server\RequestContext;
 
-$this->app->bind(SkirProcedures::class, AdminProcedures::class);
+final class AdminProcedures extends AbstractSkirProcedures
+{
+    public function getUser(GetUserRequest $request, RequestContext $context): User
+    {
+        return new User(
+            userId: $request->userId,
+            name: 'Maxim',
+        );
+    }
+}
 
 Route::skirRpc('/api/skir', [
-    SkirProcedureProvider::class,
+    AdminProcedures::class,
 ]);
 ```
+
+`AbstractSkirProcedures` registers generated method descriptors, converts incoming Skir payload arrays into generated PHP DTOs, calls your typed methods, and converts returned DTOs back into Skir payload arrays.
+
+The interface/provider pair remains available if you prefer binding `SkirProcedures` in the container and registering `SkirProcedureProvider`.
 
 ## Namespaces and modules
 
