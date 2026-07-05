@@ -74,6 +74,7 @@ describe("generated PHP", () => {
                 { kind: "field", name: "address", number: 3, type: { kind: "record", name: "Address" } },
                 { kind: "field", name: "tags", number: 4, type: { kind: "array", item: { kind: "primitive", primitive: "string" } } },
                 { kind: "field", name: "nickname", number: 5, type: { kind: "optional", other: { kind: "primitive", primitive: "string" } } },
+                { kind: "field", name: "previous_addresses", number: 6, type: { kind: "array", item: { kind: "record", name: "Address" } } },
               ],
             },
             {
@@ -121,13 +122,17 @@ $user = new User(
     address: new Address(city: 'Antwerp', postalCodes: ['2000', '2018']),
     tags: ['admin', 'beta'],
     nickname: 'johnny',
+    previousAddresses: [
+        new Address(city: 'Brussels', postalCodes: ['1000']),
+        new Address(city: 'Ghent', postalCodes: ['9000']),
+    ],
 );
 
-if ($user->toDenseJson() !== '[400,0,"John Doe",["Antwerp",["2000","2018"]],["admin","beta"],"johnny"]') {
+if ($user->toDenseJson() !== '[400,0,"John Doe",["Antwerp",["2000","2018"]],["admin","beta"],"johnny",[["Brussels",["1000"]],["Ghent",["9000"]]]]') {
     throw new RuntimeException('Unexpected user dense JSON: '.$user->toDenseJson());
 }
 
-$decodedUser = User::fromDenseJson('[400,0,"John Doe",["Antwerp",["2000","2018"]],["admin","beta"],"johnny"]');
+$decodedUser = User::fromDenseJson('[400,0,"John Doe",["Antwerp",["2000","2018"]],["admin","beta"],"johnny",[["Brussels",["1000"]],["Ghent",["9000"]]]]');
 
 if ($decodedUser->userId !== 400 || $decodedUser->name !== 'John Doe') {
     throw new RuntimeException('Unexpected decoded user.');
@@ -139,6 +144,10 @@ if (! $decodedUser->address instanceof Address || $decodedUser->address->city !=
 
 if ($decodedUser->tags !== ['admin', 'beta'] || $decodedUser->nickname !== 'johnny') {
     throw new RuntimeException('Unexpected decoded array or optional field.');
+}
+
+if (count($decodedUser->previousAddresses) !== 2 || ! $decodedUser->previousAddresses[0] instanceof Address) {
+    throw new RuntimeException('Unexpected decoded record array.');
 }
 
 $status = SubscriptionStatus::premiumSince(1743682787000);
