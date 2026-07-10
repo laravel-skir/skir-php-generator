@@ -40,9 +40,11 @@ The `generators` value uses Skir's current array syntax. Skir owns the configure
 The root namespace defaults to `Skir`, so the `config` block can be omitted when that default is suitable. Schema directories become PHP subnamespaces and output directories:
 
 ```text
-health/health.skir -> generated/php/skirout/Health/HealthRequest.php
-                   -> Skir\Health\HealthRequest
+skir-src/health/health.skir -> generated/php/skirout/Health/HealthRequest.php
+                            -> Skir\Health\HealthRequest
 ```
+
+Only source directories become namespace segments. The `.skir` filename itself does not add a namespace segment, so `health.skir` does not produce another `Health` level.
 
 A separate `Generated` namespace segment is unnecessary. The dedicated `generated/php/skirout` directory already separates generated code from handwritten application code, while the short `Skir` namespace keeps imports clear.
 
@@ -68,7 +70,7 @@ npx skir-php-generator configure-composer --root ../api --mod file:///path/to/sk
 
 The operation is idempotent. An existing equivalent mapping is left byte-for-byte unchanged. If the namespace prefix already points somewhere else, the command exits with an error and does not modify `composer.json`. It also stops with a useful error when `skir.yml` or `composer.json` is missing or invalid, the matching generator configuration is missing or invalid, an output path escapes the project root, or a generated output directory does not exist.
 
-When `outDir` is an ordered array, the configurator preserves that order in Composer's array-valued PSR-4 mapping.
+When `outDir` is an ordered array, the configurator preserves that order in Composer's array-valued PSR-4 mapping. An existing Composer path array must match the entire configured array in the same order. Any difference is a conflict: the configurator fails without appending, merging, or modifying the existing mapping.
 
 ### Package script automation
 
@@ -77,7 +79,7 @@ The workflow can be kept in `package.json`:
 ```json
 {
   "scripts": {
-    "generate:skir": "skir gen && skir-php-generator configure-composer && composer dump-autoload"
+    "skir:generate": "skir gen && skir-php-generator configure-composer"
   }
 }
 ```
@@ -85,7 +87,13 @@ The workflow can be kept in `package.json`:
 Then run:
 
 ```bash
-npm run generate:skir
+npm run skir:generate
+```
+
+Refresh Composer's autoloader as a separate follow-up step:
+
+```bash
+composer dump-autoload
 ```
 
 ### Manual Composer mapping
