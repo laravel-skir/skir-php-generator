@@ -41,7 +41,7 @@ describe("ensureComposerPsr4Mapping", () => {
 }
 `;
 
-    const result = ensureComposerPsr4Mapping(source, "Skir\\", "./generated\\php\\skirout");
+    const result = ensureComposerPsr4Mapping(source, "Skir", "./generated\\php\\skirout");
 
     expect(result).toEqual({
       changed: false,
@@ -76,6 +76,38 @@ describe("ensureComposerPsr4Mapping", () => {
     expect(JSON.parse(result.source).autoload["psr-4"]).toEqual({
       "": "src/",
       "Skir\\": "generated/skirout/",
+    });
+  });
+
+  it.each([
+    "Skir",
+    "Skir/",
+    " Skir\\",
+    "Skir\\ ",
+    "Skir\\\\",
+  ])("rejects malformed near-match Composer prefix %j", (prefix) => {
+    const source = `${JSON.stringify({
+      autoload: {
+        "psr-4": {
+          [prefix]: "generated/skirout/",
+        },
+      },
+    }, null, 2)}\n`;
+
+    expect(() => ensureComposerPsr4Mapping(source, "Skir", "generated/skirout"))
+      .toThrow(/malformed Composer PSR-4 prefix/i);
+  });
+
+  it("preserves whitespace in Composer paths", () => {
+    const source = '{"autoload":{"psr-4":{"Skir\\\\":" generated/skirout /"}}}\n';
+
+    const result = ensureComposerPsr4Mapping(source, "Skir", " generated\\skirout ");
+
+    expect(result).toEqual({
+      changed: false,
+      namespace: "Skir\\",
+      paths: " generated/skirout /",
+      source,
     });
   });
 

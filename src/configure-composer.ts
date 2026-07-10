@@ -96,13 +96,13 @@ function findGenerator(source: string, module: string): SkirGeneratorEntry {
 }
 
 function parseOutDirs(value: unknown, module: string): readonly string[] {
-  if (typeof value === "string" && value.trim().length > 0) {
+  if (typeof value === "string" && value.length > 0) {
     return [value];
   }
 
   if (Array.isArray(value)) {
     if (value.length > 0 && value.every((path): path is string => {
-      return typeof path === "string" && path.trim().length > 0;
+      return typeof path === "string" && path.length > 0;
     })) {
       return value;
     }
@@ -158,7 +158,7 @@ async function validateOutputDirectories(
 }
 
 function normalizeFilesystemPath(path: string): string {
-  const normalized = path.trim().replaceAll("\\", "/");
+  const normalized = path.replaceAll("\\", "/");
 
   if (/^[A-Za-z]:\//u.test(normalized)) {
     throw new Error(`Generated output directory ${path} escapes the project root.`);

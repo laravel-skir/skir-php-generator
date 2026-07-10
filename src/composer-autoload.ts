@@ -6,6 +6,8 @@ import {
   type ParseError,
 } from "jsonc-parser";
 
+import { PhpNamespace } from "./config.js";
+
 export type ComposerAutoloadPaths = string | readonly string[];
 
 export interface ComposerPsr4MappingResult {
@@ -28,6 +30,18 @@ export class ComposerAutoloadConflictError extends Error {
   }
 }
 
+export class MalformedComposerPsr4PrefixError extends Error {
+  constructor(
+    readonly prefix: string,
+    readonly namespace: string,
+  ) {
+    super(
+      `Malformed Composer PSR-4 prefix ${JSON.stringify(prefix)} conflicts with canonical prefix ${JSON.stringify(namespace)}.`,
+    );
+    this.name = "MalformedComposerPsr4PrefixError";
+  }
+}
+
 export function ensureComposerPsr4Mapping(
   source: string,
   namespace: string,
@@ -40,14 +54,17 @@ export function ensureComposerPsr4Mapping(
   const psr4 = autoload === undefined
     ? undefined
     : optionalObjectProperty(autoload, "psr-4", "composer.json autoload.psr-4 must be an object.");
-  const equivalentEntries = Object.entries(psr4 ?? {})
-    .filter(([prefix]) => normalizeNamespaceForComparison(prefix) === normalizedNamespace);
+  const malformedPrefix = Object.keys(psr4 ?? {}).find((prefix) => {
+    return prefix !== normalizedNamespace
+      && normalizeNamespaceForComparison(prefix) === normalizedNamespace;
+  });
 
-  if (equivalentEntries.length > 1) {
-    throw new Error(`composer.json contains multiple equivalent PSR-4 prefixes for ${normalizedNamespace}.`);
+  if (malformedPrefix !== undefined) {
+    throw new MalformedComposerPsr4PrefixError(malformedPrefix, normalizedNamespace);
   }
 
-  const existingEntry = equivalentEntries[0];
+  const existingEntry = Object.entries(psr4 ?? {})
+    .find(([prefix]) => prefix === normalizedNamespace);
 
   if (existingEntry !== undefined) {
     const existingPaths = normalizeExistingPaths(existingEntry[1], normalizedNamespace);
@@ -125,17 +142,14 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeNamespace(namespace: string): string {
-  const normalized = normalizeNamespaceForComparison(namespace);
-
-  if (normalized === undefined) {
-    throw new Error("Composer PSR-4 namespace must not be empty.");
-  }
-
-  return normalized;
+  return `${PhpNamespace.parse(namespace)}\\`;
 }
 
 function normalizeNamespaceForComparison(namespace: string): string | undefined {
-  const normalized = namespace.trim().replaceAll("/", "\\").replace(/\\+$/u, "");
+  const normalized = namespace.trim()
+    .replaceAll("/", "\\")
+    .replace(/^\\+/u, "")
+    .replace(/\\+$/u, "");
 
   return normalized.length === 0 ? undefined : `${normalized}\\`;
 }
@@ -169,8 +183,7 @@ function normalizeExistingPaths(value: unknown, namespace: string): ComposerAuto
 }
 
 function normalizePath(path: string): string {
-  const normalized = path.trim()
-    .replaceAll("\\", "/")
+  const normalized = path.replaceAll("\\", "/")
     .replace(/^(\.\/)+/u, "")
     .replace(/\/+$/u, "");
 

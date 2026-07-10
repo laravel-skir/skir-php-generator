@@ -85,6 +85,26 @@ describe("configureComposer", () => {
       .toBe("generated/skirout/");
   });
 
+  it("adds a valid explicit multi-segment namespace mapping", async () => {
+    const projectPath = createProject();
+    writeSkirConfig(projectPath, [
+      "generators:",
+      "  - mod: skir-php-generator",
+      "    outDir: generated/skirout",
+      "    config:",
+      '      namespace: "Company\\\\Contracts"',
+      "",
+    ]);
+    mkdirSync(join(projectPath, "generated", "skirout"), { recursive: true });
+    writeFileSync(join(projectPath, "composer.json"), "{}\n");
+
+    const result = await configureComposer({ root: projectPath });
+
+    expect(result.namespace).toBe("Company\\Contracts\\");
+    expect(JSON.parse(readFileSync(join(projectPath, "composer.json"), "utf8"))
+      .autoload["psr-4"]["Company\\Contracts\\"]).toBe("generated/skirout/");
+  });
+
   it("does not write composer.json when the namespace conflicts", async () => {
     const projectPath = createProject();
     const source = '{\n  "autoload": {"psr-4": {"Skir\\\\": "src/"}}\n}\n';
@@ -94,6 +114,43 @@ describe("configureComposer", () => {
 
     await expect(configureComposer({ root: projectPath })).rejects.toThrow(/conflict/i);
     expect(readFileSync(join(projectPath, "composer.json"), "utf8")).toBe(source);
+  });
+
+  it("rejects a malformed namespace without modifying composer.json", async () => {
+    const projectPath = createProject();
+    const source = '{\n  "require": {}\n}\n';
+    writeSkirConfig(projectPath, [
+      "generators:",
+      "  - mod: skir-php-generator",
+      "    outDir: generated/skirout",
+      "    config:",
+      '      namespace: " Skir"',
+      "",
+    ]);
+    mkdirSync(join(projectPath, "generated", "skirout"), { recursive: true });
+    writeFileSync(join(projectPath, "composer.json"), source);
+
+    await expect(configureComposer({ root: projectPath }))
+      .rejects.toThrow(/canonical PHP namespace/i);
+    expect(readFileSync(join(projectPath, "composer.json"), "utf8")).toBe(source);
+  });
+
+  it("validates and maps the exact configured path including whitespace", async () => {
+    const projectPath = createProject();
+    writeSkirConfig(projectPath, [
+      "generators:",
+      "  - mod: skir-php-generator",
+      '    outDir: " generated/skirout "',
+      "",
+    ]);
+    mkdirSync(join(projectPath, " generated", "skirout "), { recursive: true });
+    writeFileSync(join(projectPath, "composer.json"), "{}\n");
+
+    const result = await configureComposer({ root: projectPath });
+
+    expect(result.paths).toBe(" generated/skirout /");
+    expect(JSON.parse(readFileSync(join(projectPath, "composer.json"), "utf8"))
+      .autoload["psr-4"]["Skir\\"]).toBe(" generated/skirout /");
   });
 
   it("rejects output directories that escape the project root", async () => {

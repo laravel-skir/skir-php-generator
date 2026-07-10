@@ -1,4 +1,4 @@
-import { DEFAULT_NAMESPACE } from "./config.js";
+import { GeneratorConfig, type GeneratorConfigInput } from "./config.js";
 
 export const PHP_FILE_HEADER = [
   "/**",
@@ -9,9 +9,7 @@ export const PHP_FILE_HEADER = [
   " */",
 ].join("\n");
 
-export interface PhpGeneratorConfig {
-  readonly namespace?: string;
-}
+export type PhpGeneratorConfig = GeneratorConfigInput;
 
 export interface PhpGeneratorInput {
   readonly config?: PhpGeneratorConfig;
@@ -111,7 +109,7 @@ interface ImportRegistry {
 }
 
 export function generatePhpFiles(input: PhpGeneratorInput): GeneratedFile[] {
-  const namespace = input.config?.namespace ?? DEFAULT_NAMESPACE;
+  const { namespace } = GeneratorConfig.parse(input.config ?? {});
   const classNames = buildClassNameRegistry(namespace, input.modules);
   const methodGroups = new Map<string, { context: ModuleOutputContext; methods: SkirMethod[] }>();
   const recordFiles: GeneratedFile[] = [];

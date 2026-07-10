@@ -3,6 +3,55 @@ import { describe, expect, it } from "vitest";
 import { generatePhpFiles } from "../src/generator.js";
 
 describe("generatePhpFiles", () => {
+  it.each([
+    "",
+    " Skir",
+    "Skir ",
+    "Skir\n",
+    "Skir/Contracts",
+    "\\Skir",
+    "Skir\\",
+    "Skir\\\\Contracts",
+    "9Skir",
+    "Skir\\invalid-segment",
+  ])("rejects malformed PHP namespace %j", (namespace) => {
+    expect(() => generatePhpFiles({
+      config: { namespace },
+      modules: [
+        {
+          path: "health.skir",
+          records: [
+            {
+              kind: "struct",
+              name: "HealthRequest",
+              fields: [],
+            },
+          ],
+        },
+      ],
+    })).toThrow(/canonical PHP namespace/i);
+  });
+
+  it("preserves a valid explicit multi-segment PHP namespace", () => {
+    const files = generatePhpFiles({
+      config: { namespace: "Company\\Contracts" },
+      modules: [
+        {
+          path: "health/health.skir",
+          records: [
+            {
+              kind: "struct",
+              name: "HealthRequest",
+              fields: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(files[0]?.code).toContain("namespace Company\\Contracts\\Health;");
+  });
+
   it("uses the Skir root namespace and marks every generated artifact as overwritten", () => {
     const files = generatePhpFiles({
       modules: [
