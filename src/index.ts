@@ -17,9 +17,3 @@ class PhpGenerator implements CodeGenerator<GeneratorConfig> {
 export const GENERATOR = new PhpGenerator();
 
 export { generatePhpFiles };
-export {
-  generateServerManifestFile,
-  SERVER_MANIFEST_VERSION,
-  type ServerManifestMethod,
-  type ServerManifestModule,
-} from "./server-manifest.js";

@@ -332,6 +332,126 @@ describe("generatePhpFiles", () => {
     expect(files.at(-1)?.path).toBe("skir-server-manifest.json");
   });
 
+  it("uses record locations for cross-module, nested, and optional manifest types", () => {
+    const addressRecord = {
+      kind: "record",
+      key: "common/address.skir:0",
+      recordType: "struct" as const,
+      name: "Address",
+      fields: [],
+    };
+    const envelopeRecord = {
+      kind: "record",
+      key: "admin/envelope.skir:0",
+      recordType: "struct" as const,
+      name: "Envelope",
+      fields: [],
+    };
+    const metadataRecord = {
+      kind: "record",
+      key: "admin/envelope.skir:1",
+      recordType: "struct" as const,
+      name: "Metadata",
+      fields: [],
+    };
+    const files = generatePhpFiles({
+      config: {
+        namespace: "Skir",
+      },
+      recordMap: new Map([
+        [
+          addressRecord.key,
+          {
+            kind: "record-location",
+            record: addressRecord,
+            recordAncestors: [addressRecord],
+            modulePath: "common/address.skir",
+          },
+        ],
+        [
+          metadataRecord.key,
+          {
+            kind: "record-location",
+            record: metadataRecord,
+            recordAncestors: [envelopeRecord, metadataRecord],
+            modulePath: "admin/envelope.skir",
+          },
+        ],
+      ]),
+      modules: [
+        {
+          path: "admin/service.skir",
+          methods: [
+            {
+              kind: "method",
+              name: "ResolveAddress",
+              number: 1,
+              requestType: {
+                kind: "record",
+                key: addressRecord.key,
+                nameParts: [{ token: { text: "Address" } }],
+              },
+              responseType: {
+                kind: "record",
+                key: metadataRecord.key,
+                nameParts: [
+                  { token: { text: "Envelope" } },
+                  { token: { text: "Metadata" } },
+                ],
+              },
+            },
+            {
+              kind: "method",
+              name: "MaybeResolveAddress",
+              number: 2,
+              requestType: {
+                kind: "optional",
+                other: {
+                  kind: "record",
+                  key: addressRecord.key,
+                  nameParts: [{ token: { text: "Address" } }],
+                },
+              },
+              responseType: { kind: "bool" },
+            },
+          ],
+        },
+      ],
+    });
+    const manifestFile = files.find((file) => file.path === "skir-server-manifest.json");
+
+    expect(JSON.parse(manifestFile?.code ?? "")).toEqual({
+      version: 1,
+      generator: "skir-php-generator",
+      modules: [
+        {
+          name: "Admin",
+          methodEnum: "Skir\\Admin\\AdminSkirMethod",
+          methods: [
+            {
+              name: "ResolveAddress",
+              enumCase: "ResolveAddress",
+              phpMethod: "resolveAddress",
+              requestType: "Skir\\Common\\Address",
+              requestClass: "Skir\\Common\\Address",
+              responseType: "Skir\\Admin\\EnvelopeMetadata",
+              responseClass: "Skir\\Admin\\EnvelopeMetadata",
+            },
+            {
+              name: "MaybeResolveAddress",
+              enumCase: "MaybeResolveAddress",
+              phpMethod: "maybeResolveAddress",
+              requestType: "?Skir\\Common\\Address",
+              requestClass: "Skir\\Common\\Address",
+              responseType: "bool",
+              responseClass: null,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("generates a typed SkirRPC client for SkirRPC methods", () => {
     const files = generatePhpFiles({
       config: {

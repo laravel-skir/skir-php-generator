@@ -239,14 +239,27 @@ if (! $rpcUser instanceof UsersUser || $rpcUser->name !== 'John Doe') {
 
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
-      expect(manifest.modules.find((module: { name: string }) => module.name === "Admin")?.methods)
-        .toContainEqual(expect.objectContaining({
-          name: "GetUser",
-          requestType: "Skir\\Admin\\UsersUser",
-          requestClass: "Skir\\Admin\\UsersUser",
-          responseType: "Skir\\Admin\\UsersUser",
-          responseClass: "Skir\\Admin\\UsersUser",
-        }));
+      expect(manifest).toEqual({
+        version: 1,
+        generator: "skir-php-generator",
+        modules: [
+          {
+            name: "Admin",
+            methodEnum: "Skir\\Admin\\AdminSkirMethod",
+            methods: [
+              {
+                name: "GetUser",
+                enumCase: "GetUser",
+                phpMethod: "getUser",
+                requestType: "Skir\\Admin\\UsersUser",
+                requestClass: "Skir\\Admin\\UsersUser",
+                responseType: "Skir\\Admin\\UsersUser",
+                responseClass: "Skir\\Admin\\UsersUser",
+              },
+            ],
+          },
+        ],
+      });
 
       const userCode = readFileSync(join(generatedPath, "Admin", "UsersUser.php"), "utf8");
       const methodsCode = readFileSync(join(generatedPath, "Admin", "SkirMethods.php"), "utf8");
