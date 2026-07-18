@@ -99,4 +99,89 @@ describe("StandardPhpTarget", () => {
       "Field::value('billing_address', 1, \\App\\Skir\\Common\\Address::skirType())",
     );
   });
+
+  it("uses the first external basename and fully qualifies a later collision", () => {
+    const commonAddress = {
+      kind: "record" as const,
+      key: "common-address",
+      name: { text: "Address" },
+      recordType: "struct" as const,
+      fields: [],
+    };
+    const billingAddress = {
+      kind: "record" as const,
+      key: "billing-address",
+      name: { text: "Address" },
+      recordType: "struct" as const,
+      fields: [],
+    };
+    const commonLocation = {
+      kind: "record-location" as const,
+      record: commonAddress,
+      recordAncestors: [commonAddress],
+      modulePath: "common/address.skir",
+    };
+    const billingLocation = {
+      kind: "record-location" as const,
+      record: billingAddress,
+      recordAncestors: [billingAddress],
+      modulePath: "billing/address.skir",
+    };
+    const files = generatePhpFiles({
+      config: { namespace: "App\\Skir" },
+      modules: [{
+        path: "common/address.skir",
+        records: [commonLocation],
+      }, {
+        path: "billing/address.skir",
+        records: [billingLocation],
+      }, {
+        path: "admin/order.skir",
+        records: [{
+          kind: "record",
+          name: { text: "Order" },
+          recordType: "struct",
+          fields: [{
+            kind: "field",
+            name: { text: "shipping_address" },
+            number: 1,
+            type: {
+              kind: "record",
+              key: "common-address",
+              recordType: "struct",
+              nameParts: [{ token: { text: "Address" } }],
+            },
+          }, {
+            kind: "field",
+            name: { text: "billing_address" },
+            number: 2,
+            type: {
+              kind: "record",
+              key: "billing-address",
+              recordType: "struct",
+              nameParts: [{ token: { text: "Address" } }],
+            },
+          }],
+        }],
+      }],
+      recordMap: new Map([
+        ["common-address", commonLocation],
+        ["billing-address", billingLocation],
+      ]),
+    });
+    const order = files.find((file) => file.path === "Admin/Order.php")?.code ?? "";
+
+    expect(order).toContain("use App\\Skir\\Common\\Address;");
+    expect(order).not.toContain("use App\\Skir\\Billing\\Address");
+    expect(order).not.toContain("CommonAddress");
+    expect(order).not.toContain("BillingAddress");
+    expect(order).toContain("public Address $shippingAddress");
+    expect(order).toContain("public \\App\\Skir\\Billing\\Address $billingAddress");
+    expect(order).toContain(
+      "Field::value('shipping_address', 1, Address::skirType())",
+    );
+    expect(order).toContain(
+      "Field::value('billing_address', 2, \\App\\Skir\\Billing\\Address::skirType())",
+    );
+  });
 });

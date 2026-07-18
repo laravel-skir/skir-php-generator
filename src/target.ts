@@ -1,5 +1,6 @@
 import {
   importClass,
+  importClassAs,
   indent,
   renderPhpFile,
   toClassName,
@@ -338,9 +339,20 @@ function recordTypeClassName(
     reservedName.toLowerCase() === className.toLowerCase()
   ));
 
-  return isReserved
-    ? `\\${fullyQualifiedClassName}`
-    : importClass(context.imports, fullyQualifiedClassName);
+  if (isReserved) {
+    return `\\${fullyQualifiedClassName}`;
+  }
+
+  const existingImport = [...context.imports.imports.entries()]
+    .find(([localName]) => localName.toLowerCase() === className.toLowerCase());
+
+  if (existingImport === undefined) {
+    return importClassAs(context.imports, fullyQualifiedClassName, className);
+  }
+
+  return existingImport[1].toLowerCase() === fullyQualifiedClassName.toLowerCase()
+    ? existingImport[0]
+    : `\\${fullyQualifiedClassName}`;
 }
 
 function fullyQualifiedRecordClassName(
