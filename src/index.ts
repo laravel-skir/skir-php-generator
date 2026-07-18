@@ -5,7 +5,7 @@ import { generatePhpFiles } from "./generator.js";
 
 class PhpGenerator implements CodeGenerator<GeneratorConfig> {
   readonly id = GENERATOR_MODULE;
-  readonly configType = GeneratorConfig;
+  readonly configType: CodeGenerator<GeneratorConfig>["configType"] = GeneratorConfig;
 
   generateCode(input: CodeGenerator.Input<GeneratorConfig>): CodeGenerator.Output {
     return {
@@ -17,3 +17,5 @@ class PhpGenerator implements CodeGenerator<GeneratorConfig> {
 export const GENERATOR = new PhpGenerator();
 
 export { generatePhpFiles };
+export { StandardPhpTarget } from "./target.js";
+export default GENERATOR;

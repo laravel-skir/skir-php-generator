@@ -245,6 +245,7 @@ declare(strict_types=1);
 namespace Skir\\Admin;
 
 use Skir\\Runtime\\MethodDescriptor;
+use Skir\\Runtime\\Type;
 
 final readonly class SkirMethods
 {
