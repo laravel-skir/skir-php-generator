@@ -1,3 +1,8 @@
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { generatePhpFiles } from "../src/generator.js";
@@ -184,4 +189,210 @@ describe("StandardPhpTarget", () => {
       "Field::value('billing_address', 2, \\App\\Skir\\Billing\\Address::skirType())",
     );
   });
+
+  it("renders valid nullable unions across structs and RPC signatures", () => {
+    const files = generateNullableTypeFiles();
+    const values = files.find((file) => file.path === "Models/NullableValues.php")?.code ?? "";
+    const client = files.find((file) => file.path === "Models/SkirRpcClient.php")?.code ?? "";
+    const procedures = files.find((file) => file.path === "Models/SkirProcedures.php")?.code ?? "";
+    const abstractProcedures = files.find((file) => file.path === "Models/AbstractSkirProcedures.php")?.code ?? "";
+    const php = files.filter((file) => file.path.endsWith(".php"))
+      .map((file) => file.code)
+      .join("\n");
+
+    expect(values).toContain("public int|string|null $optionalInt64");
+    expect(values).toContain("public int|string|null $optionalHash64");
+    expect(values).toContain("public mixed $optionalMixed");
+    expect(values).toContain("public int|string|null $nestedOptionalInt64");
+    expect(values).toContain("public ?string $optionalString");
+    expect(values).toContain("public ?array $optionalStrings");
+    expect(values).toContain("public ?Marker $optionalMarker");
+    expect(client).toContain(
+      "public function echoInt64(int|string|null $request): int|string|null",
+    );
+    expect(client).toContain("public function echoMixed(mixed $request): mixed");
+    expect(client).toContain(
+      "public function echoNested(int|string|null $request): int|string|null",
+    );
+    expect(procedures).toContain(
+      "public function echoInt64(int|string|null $request, SkirContext $context): int|string|null;",
+    );
+    expect(procedures).toContain(
+      "public function echoMixed(mixed $request, SkirContext $context): mixed;",
+    );
+    expect(procedures).toContain(
+      "public function echoNested(int|string|null $request, SkirContext $context): int|string|null;",
+    );
+    expect(abstractProcedures).toContain(
+      "abstract public function echoInt64(int|string|null $request, SkirContext $context): int|string|null;",
+    );
+    expect(abstractProcedures).toContain(
+      "abstract public function echoMixed(mixed $request, SkirContext $context): mixed;",
+    );
+    expect(abstractProcedures).toContain(
+      "abstract public function echoNested(int|string|null $request, SkirContext $context): int|string|null;",
+    );
+    expect(php).not.toMatch(/\?int\|string|\?mixed|\?\?|null\|null/u);
+  });
+
+  const phpProbe = spawnSync("php", ["-v"], { stdio: "ignore" });
+  const phpUnavailable = phpProbe.error !== undefined
+    && "code" in phpProbe.error
+    && phpProbe.error.code === "ENOENT";
+  const phpLintIt = phpUnavailable ? it.skip : it;
+
+  phpLintIt("passes php -l for generated nullable type files when PHP is available", () => {
+    const outputPath = mkdtempSync(join(tmpdir(), "skir-nullable-types-"));
+
+    try {
+      for (const file of generateNullableTypeFiles().filter((file) => file.path.endsWith(".php"))) {
+        const filePath = join(outputPath, file.path);
+
+        mkdirSync(dirname(filePath), { recursive: true });
+        writeFileSync(filePath, file.code);
+        execFileSync("php", ["-l", filePath], { stdio: "pipe" });
+      }
+    } finally {
+      rmSync(outputPath, { recursive: true, force: true });
+    }
+  });
 });
+
+function generateNullableTypeFiles() {
+  const marker = {
+    kind: "record" as const,
+    key: "marker",
+    name: { text: "Marker" },
+    recordType: "struct" as const,
+    fields: [],
+  };
+  const nullableValues = {
+    kind: "record" as const,
+    key: "nullable-values",
+    name: { text: "NullableValues" },
+    recordType: "struct" as const,
+    fields: [{
+      kind: "field" as const,
+      name: { text: "optional_int64" },
+      number: 1,
+      type: { kind: "optional", other: { kind: "primitive", primitive: "int64" } },
+    }, {
+      kind: "field" as const,
+      name: { text: "optional_hash64" },
+      number: 2,
+      type: { kind: "optional", other: { kind: "primitive", primitive: "hash64" } },
+    }, {
+      kind: "field" as const,
+      name: { text: "optional_mixed" },
+      number: 3,
+      type: { kind: "optional", other: { kind: "primitive", primitive: "mixed" } },
+    }, {
+      kind: "field" as const,
+      name: { text: "nested_optional_int64" },
+      number: 4,
+      type: {
+        kind: "optional",
+        other: {
+          kind: "optional",
+          other: { kind: "primitive", primitive: "int64" },
+        },
+      },
+    }, {
+      kind: "field" as const,
+      name: { text: "optional_string" },
+      number: 5,
+      type: { kind: "optional", other: { kind: "primitive", primitive: "string" } },
+    }, {
+      kind: "field" as const,
+      name: { text: "optional_strings" },
+      number: 6,
+      type: {
+        kind: "optional",
+        other: {
+          kind: "array",
+          item: { kind: "primitive", primitive: "string" },
+        },
+      },
+    }, {
+      kind: "field" as const,
+      name: { text: "optional_marker" },
+      number: 7,
+      type: {
+        kind: "optional",
+        other: {
+          kind: "record",
+          key: "marker",
+          recordType: "struct" as const,
+          nameParts: [{ token: { text: "Marker" } }],
+        },
+      },
+    }],
+  };
+  const markerLocation = {
+    kind: "record-location" as const,
+    record: marker,
+    recordAncestors: [marker],
+    modulePath: "models/types.skir",
+  };
+  const valuesLocation = {
+    kind: "record-location" as const,
+    record: nullableValues,
+    recordAncestors: [nullableValues],
+    modulePath: "models/types.skir",
+  };
+  const optionalInt64 = {
+    kind: "optional",
+    other: { kind: "primitive", primitive: "int64" },
+  } as const;
+  const optionalHash64 = {
+    kind: "optional",
+    other: { kind: "primitive", primitive: "hash64" },
+  } as const;
+  const optionalMixed = {
+    kind: "optional",
+    other: { kind: "primitive", primitive: "mixed" },
+  } as const;
+  const nestedOptionalInt64 = {
+    kind: "optional",
+    other: optionalInt64,
+  } as const;
+  const nestedOptionalHash64 = {
+    kind: "optional",
+    other: optionalHash64,
+  } as const;
+  const nestedOptionalMixed = {
+    kind: "optional",
+    other: optionalMixed,
+  } as const;
+
+  return generatePhpFiles({
+    config: { namespace: "App\\Skir" },
+    modules: [{
+      path: "models/types.skir",
+      records: [markerLocation, valuesLocation],
+      methods: [{
+        kind: "method",
+        name: { text: "EchoInt64" },
+        number: 1,
+        requestType: optionalInt64,
+        responseType: optionalHash64,
+      }, {
+        kind: "method",
+        name: { text: "EchoMixed" },
+        number: 2,
+        requestType: optionalMixed,
+        responseType: nestedOptionalMixed,
+      }, {
+        kind: "method",
+        name: { text: "EchoNested" },
+        number: 3,
+        requestType: nestedOptionalInt64,
+        responseType: nestedOptionalHash64,
+      }],
+    }],
+    recordMap: new Map([
+      ["marker", markerLocation],
+      ["nullable-values", valuesLocation],
+    ]),
+  });
+}

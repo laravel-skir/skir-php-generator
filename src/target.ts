@@ -88,7 +88,7 @@ export class StandardPhpTarget implements PhpTargetAdapter {
     }
 
     if (type.kind === "optional") {
-      return `?${this.phpType(type.inner, context)}`;
+      return nullablePhpType(this.phpType(type.inner, context));
     }
 
     if (type.kind === "record") {
@@ -279,6 +279,16 @@ export class StandardPhpTarget implements PhpTargetAdapter {
       "}",
     ].join("\n");
   }
+}
+
+function nullablePhpType(type: string): string {
+  const unionMembers = type.split("|");
+
+  if (type === "mixed" || type.startsWith("?") || unionMembers.includes("null")) {
+    return type;
+  }
+
+  return unionMembers.length === 1 ? `?${type}` : `${type}|null`;
 }
 
 function isStructField(
