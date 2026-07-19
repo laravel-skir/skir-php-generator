@@ -1,6 +1,6 @@
 {
   "name": "skir-php-generator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Skir code generator for standard PHP data objects.",
   "type": "module",
   "license": "MIT",
@@ -45,6 +45,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@php-skir/generator-core": "^0.1.0",
     "jsonc-parser": "^3.3.1",
     "skir-internal": "^0.2.21",
     "yaml": "^2.9.0",

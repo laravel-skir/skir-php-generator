@@ -94,9 +94,9 @@ describe("generatePhpFiles", () => {
 
     expect(files.find((file) => file.path === "Health/HealthRequest.php")?.code)
       .toContain("namespace Skir\\Health;");
-    expect(files).toHaveLength(8);
+    expect(files).toHaveLength(9);
 
-    for (const file of files) {
+    for (const file of files.filter((file) => file.path.endsWith(".php"))) {
       expect(file.code).toContain(`declare(strict_types=1);\n\n${banner}\n\nnamespace Skir\\Health;`);
       expect(file.code.match(/DO NOT EDIT/g)).toHaveLength(1);
     }
@@ -125,7 +125,7 @@ describe("generatePhpFiles", () => {
       ],
     });
 
-    expect(files).toHaveLength(1);
+    expect(files).toHaveLength(2);
     expect(files[0]?.path).toBe("User.php");
     expect(files[0]?.code).toContain("namespace App\\Skir;");
     expect(files[0]?.code).toContain("final readonly class User");
@@ -181,7 +181,7 @@ describe("generatePhpFiles", () => {
       ],
     });
 
-    expect(files).toHaveLength(1);
+    expect(files).toHaveLength(2);
     expect(files[0]?.path).toBe("SubscriptionStatus.php");
     expect(files[0]?.code).toContain("final readonly class SubscriptionStatus");
     expect(files[0]?.code).toContain("public static function free(): self");
@@ -240,6 +240,404 @@ describe("generatePhpFiles", () => {
     expect(methodFile?.code).toContain("number: 3180856469");
     expect(methodFile?.code).toContain("requestType: GetUserRequest::skirType()");
     expect(methodFile?.code).toContain("responseType: User::skirType()");
+  });
+
+  it("generates the standard PHP server manifest", () => {
+    const files = generatePhpFiles({
+      config: {
+        namespace: "Skir",
+      },
+      modules: [
+        {
+          path: "admin/users.skir",
+          records: [
+            {
+              kind: "struct",
+              name: "GetUserRequest",
+              fields: [],
+            },
+            {
+              kind: "struct",
+              name: "GetUserResponse",
+              fields: [],
+            },
+            {
+              recordType: "enum",
+              name: "UserScope",
+              fields: [{ kind: "field", name: "all", number: 0 }],
+            },
+          ],
+          methods: [
+            {
+              kind: "method",
+              name: "GetUser",
+              number: 1,
+              requestType: { kind: "record", name: "GetUserRequest" },
+              responseType: { kind: "record", name: "GetUserResponse" },
+            },
+            {
+              kind: "method",
+              name: "FindUsers",
+              number: 3,
+              requestType: {
+                kind: "optional",
+                other: { kind: "record", name: "UserScope", recordType: "enum" },
+              },
+              responseType: { kind: "record", name: "UserScope", recordType: "enum" },
+            },
+          ],
+        },
+        {
+          path: "health.skir",
+          methods: [
+            {
+              kind: "method",
+              name: "CheckHealth",
+              number: 2,
+              requestType: { kind: "string" },
+              responseType: {
+                kind: "optional",
+                other: { kind: "int64" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const manifestFile = files.find((file) => file.path === "skir-server-manifest.json");
+
+    expect(manifestFile).toBeDefined();
+    expect(JSON.parse(manifestFile?.code ?? "")).toEqual({
+      version: 1,
+      generator: "skir-php-generator",
+      modules: [
+        {
+          name: "Admin",
+          methodEnum: "Skir\\Admin\\AdminSkirMethod",
+          methods: [
+            {
+              name: "GetUser",
+              enumCase: "GetUser",
+              phpMethod: "getUser",
+              requestType: "Skir\\Admin\\GetUserRequest",
+              requestClass: "Skir\\Admin\\GetUserRequest",
+              responseType: "Skir\\Admin\\GetUserResponse",
+              responseClass: "Skir\\Admin\\GetUserResponse",
+            },
+            {
+              name: "FindUsers",
+              enumCase: "FindUsers",
+              phpMethod: "findUsers",
+              requestType: "?Skir\\Admin\\UserScope",
+              requestClass: null,
+              responseType: "Skir\\Admin\\UserScope",
+              responseClass: "Skir\\Admin\\UserScope",
+            },
+          ],
+        },
+        {
+          name: "_Root",
+          methodEnum: "Skir\\SkirMethod",
+          methods: [
+            {
+              name: "CheckHealth",
+              enumCase: "CheckHealth",
+              phpMethod: "checkHealth",
+              requestType: "string",
+              requestClass: null,
+              responseType: "int|string|null",
+              responseClass: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(manifestFile?.code.endsWith("\n")).toBe(true);
+    expect(files.at(-1)?.path).toBe("skir-server-manifest.json");
+  });
+
+  it("uses normalized PHP namespace segments for manifest module identities", () => {
+    const files = generatePhpFiles({
+      config: {
+        namespace: "Skir",
+      },
+      modules: [
+        {
+          path: "user-profile/profile.skir",
+          records: [
+            { kind: "struct", name: "ProfileRequest", fields: [] },
+            { kind: "struct", name: "ProfileResponse", fields: [] },
+          ],
+          methods: [
+            {
+              kind: "method",
+              name: "GetProfile",
+              number: 1,
+              requestType: { kind: "record", name: "ProfileRequest" },
+              responseType: { kind: "record", name: "ProfileResponse" },
+            },
+          ],
+        },
+        {
+          path: "admin/users/users.skir",
+          methods: [
+            { kind: "method", name: "ListUsers", number: 2 },
+          ],
+        },
+        {
+          path: "admin.users/users.skir",
+          methods: [
+            { kind: "method", name: "ListAdmins", number: 3 },
+          ],
+        },
+        {
+          path: "health.skir",
+          methods: [
+            { kind: "method", name: "Health", number: 4 },
+          ],
+        },
+        {
+          path: "Root/root.skir",
+          methods: [
+            { kind: "method", name: "DirectoryRoot", number: 5 },
+          ],
+        },
+      ],
+    });
+    const manifestFile = files.find((file) => file.path === "skir-server-manifest.json");
+    const manifest = JSON.parse(manifestFile?.code ?? "");
+
+    expect(manifest.modules.map((module: { name: string }) => module.name)).toEqual([
+      "UserProfile",
+      "Admin.Users",
+      "AdminUsers",
+      "_Root",
+      "Root",
+    ]);
+    expect(manifest.modules.flatMap((module: { name: string; methods: { name: string }[] }) =>
+      module.methods.map((method) => `${module.name}.${method.name}`))).toEqual([
+      "UserProfile.GetProfile",
+      "Admin.Users.ListUsers",
+      "AdminUsers.ListAdmins",
+      "_Root.Health",
+      "Root.DirectoryRoot",
+    ]);
+    expect(manifest.modules[0]).toMatchObject({
+      methodEnum: "Skir\\UserProfile\\UserProfileSkirMethod",
+      methods: [
+        {
+          requestType: "Skir\\UserProfile\\ProfileRequest",
+          requestClass: "Skir\\UserProfile\\ProfileRequest",
+          responseType: "Skir\\UserProfile\\ProfileResponse",
+          responseClass: "Skir\\UserProfile\\ProfileResponse",
+        },
+      ],
+    });
+    expect(manifest.modules[1]).toMatchObject({
+      methodEnum: "Skir\\Admin\\Users\\AdminUsersSkirMethod",
+    });
+    expect(manifest.modules[2]).toMatchObject({
+      methodEnum: "Skir\\AdminUsers\\AdminUsersSkirMethod",
+    });
+    expect(manifest.modules[3]).toMatchObject({
+      methodEnum: "Skir\\SkirMethod",
+    });
+    expect(manifest.modules[4]).toMatchObject({
+      methodEnum: "Skir\\Root\\RootSkirMethod",
+    });
+  });
+
+  it("rejects distinct source directories that normalize to the same module identity", () => {
+    expect(() => generatePhpFiles({
+      modules: [
+        {
+          path: "user-profile/profile.skir",
+          methods: [
+            { kind: "method", name: "GetProfile", number: 1 },
+          ],
+        },
+        {
+          path: "user_profile/account.skir",
+          methods: [
+            { kind: "method", name: "GetAccount", number: 2 },
+          ],
+        },
+      ],
+    })).toThrow(/UserProfile.*user-profile.*user_profile/i);
+  });
+
+  it("reserves the leading underscore module identity for root-level methods", () => {
+    const files = generatePhpFiles({
+      modules: [
+        {
+          path: "_root/profile.skir",
+          methods: [
+            { kind: "method", name: "GetProfile", number: 1 },
+          ],
+        },
+      ],
+    });
+    const manifestFile = files.find((file) => file.path === "skir-server-manifest.json");
+    const manifest = JSON.parse(manifestFile?.code ?? "");
+
+    expect(manifest.modules[0]?.name).toBe("Root");
+    expect(manifest.modules[0]?.name).not.toBe("_Root");
+  });
+
+  it("uses record locations for cross-module, nested, and optional manifest types", () => {
+    const addressRecord = {
+      kind: "record",
+      key: "common/address.skir:0",
+      recordType: "struct" as const,
+      name: "Address",
+      fields: [],
+    };
+    const envelopeRecord = {
+      kind: "record",
+      key: "admin/envelope.skir:0",
+      recordType: "struct" as const,
+      name: "Envelope",
+      fields: [],
+    };
+    const metadataRecord = {
+      kind: "record",
+      key: "admin/envelope.skir:1",
+      recordType: "struct" as const,
+      name: "Metadata",
+      fields: [],
+    };
+    const scopeRecord = {
+      kind: "record",
+      key: "common/scope.skir:0",
+      recordType: "enum" as const,
+      name: "Scope",
+      fields: [],
+    };
+    const files = generatePhpFiles({
+      config: {
+        namespace: "Skir",
+      },
+      recordMap: new Map([
+        [
+          addressRecord.key,
+          {
+            kind: "record-location",
+            record: addressRecord,
+            recordAncestors: [addressRecord],
+            modulePath: "common/address.skir",
+          },
+        ],
+        [
+          metadataRecord.key,
+          {
+            kind: "record-location",
+            record: metadataRecord,
+            recordAncestors: [envelopeRecord, metadataRecord],
+            modulePath: "admin/envelope.skir",
+          },
+        ],
+        [
+          scopeRecord.key,
+          {
+            kind: "record-location",
+            record: scopeRecord,
+            recordAncestors: [scopeRecord],
+            modulePath: "common/scope.skir",
+          },
+        ],
+      ]),
+      modules: [
+        {
+          path: "admin/service.skir",
+          methods: [
+            {
+              kind: "method",
+              name: "ResolveAddress",
+              number: 1,
+              requestType: {
+                kind: "record",
+                key: addressRecord.key,
+                nameParts: [{ token: { text: "Address" } }],
+              },
+              responseType: {
+                kind: "record",
+                key: metadataRecord.key,
+                nameParts: [
+                  { token: { text: "Envelope" } },
+                  { token: { text: "Metadata" } },
+                ],
+              },
+            },
+            {
+              kind: "method",
+              name: "MaybeResolveAddress",
+              number: 2,
+              requestType: {
+                kind: "optional",
+                other: {
+                  kind: "record",
+                  key: addressRecord.key,
+                  nameParts: [{ token: { text: "Address" } }],
+                },
+              },
+              responseType: { kind: "bool" },
+            },
+            {
+              kind: "method",
+              name: "FindByScope",
+              number: 3,
+              requestType: {
+                kind: "record",
+                key: scopeRecord.key,
+                nameParts: [{ token: { text: "Scope" } }],
+              },
+              responseType: { kind: "bool" },
+            },
+          ],
+        },
+      ],
+    });
+    const manifestFile = files.find((file) => file.path === "skir-server-manifest.json");
+
+    expect(JSON.parse(manifestFile?.code ?? "")).toEqual({
+      version: 1,
+      generator: "skir-php-generator",
+      modules: [
+        {
+          name: "Admin",
+          methodEnum: "Skir\\Admin\\AdminSkirMethod",
+          methods: [
+            {
+              name: "ResolveAddress",
+              enumCase: "ResolveAddress",
+              phpMethod: "resolveAddress",
+              requestType: "Skir\\Common\\Address",
+              requestClass: "Skir\\Common\\Address",
+              responseType: "Skir\\Admin\\EnvelopeMetadata",
+              responseClass: "Skir\\Admin\\EnvelopeMetadata",
+            },
+            {
+              name: "MaybeResolveAddress",
+              enumCase: "MaybeResolveAddress",
+              phpMethod: "maybeResolveAddress",
+              requestType: "?Skir\\Common\\Address",
+              requestClass: "Skir\\Common\\Address",
+              responseType: "bool",
+              responseClass: null,
+            },
+            {
+              name: "FindByScope",
+              enumCase: "FindByScope",
+              phpMethod: "findByScope",
+              requestType: "Skir\\Common\\Scope",
+              requestClass: null,
+              responseType: "bool",
+              responseClass: null,
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it("generates a typed SkirRPC client for SkirRPC methods", () => {

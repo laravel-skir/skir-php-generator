@@ -10,6 +10,8 @@ Generates framework-agnostic PHP data objects, RPC clients, and server procedure
 
 Generated PHP uses `php-skir/runtime` for dense JSON serialization. Install `php-skir/client` when using generated RPC clients and `php-skir/server` when using generated server contracts.
 
+The npm package uses [`@php-skir/generator-core`](https://github.com/php-skir/generator-core) at generation time for schema normalization, PHP naming and imports, shared enum and RPC rendering, server manifests, and Composer configuration. This package remains the framework-agnostic adapter: it owns the standard PHP data-object representation and conversions, while `php-skir/runtime` remains the Composer dependency used by the generated PHP at runtime.
+
 ## Installation
 
 ```bash
@@ -147,6 +149,56 @@ For servers, the generator emits a module method enum, `AbstractSkirProcedures.p
 
 When two generated records would otherwise use the same PHP class name in one namespace, the generator prefixes each class with its module basename to keep output deterministic.
 
+## Validation ownership
+
+This generator intentionally performs no application validation. In Laravel, validate untrusted input with a handwritten Form Request before constructing generated objects. In other frameworks, use that framework's validator or an application-owned validation boundary.
+
+The generated classes describe and convert the Skir wire format; they are not an input-validation boundary. Keep validation code outside `skirout`, because Skir owns that directory and regeneration overwrites its contents.
+
+## Server scaffolding manifest
+
+Each generation run writes `skir-server-manifest.json` at the root of the configured `outDir`. For the configuration above, the path is:
+
+```text
+generated/php/skirout/skir-server-manifest.json
+```
+
+The manifest is consumed by the [`php-skir/server`](https://github.com/php-skir/server) Laravel scaffolding commands. Keep the manifest path in the server package configuration aligned with the generator `outDir`.
+
+Manifest module names use the generated PHP namespace segments joined with dots: `user-profile/` becomes `UserProfile`, nested `admin/users/` becomes `Admin.Users`, and a literal `admin.users/` directory becomes `AdminUsers`. Root-level methods use the reserved `_Root` module, while a real `Root/` directory remains `Root`. These names prefix exact server method IDs such as `_Root.Health` and `UserProfile.GetProfile`. Generation fails when distinct source directories normalize to the same PHP module instead of merging them.
+
+The current schema version is `1`:
+
+```json
+{
+  "version": 1,
+  "generator": "skir-php-generator",
+  "modules": [
+    {
+      "name": "Admin",
+      "methodEnum": "Skir\\Admin\\AdminSkirMethod",
+      "methods": [
+        {
+          "name": "GetUser",
+          "enumCase": "GetUser",
+          "phpMethod": "getUser",
+          "requestType": "Skir\\Admin\\GetUserRequest",
+          "requestClass": "Skir\\Admin\\GetUserRequest",
+          "responseType": "Skir\\Admin\\GetUserResponse",
+          "responseClass": "Skir\\Admin\\GetUserResponse"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`methodEnum` and record request and response types are fully qualified PHP names without a leading backslash. `requestClass` is non-null only when the request is a generated object/struct DTO that can be hydrated through a Form Request; enum and other value requests use `null` while `requestType` retains their PHP type. `responseClass` identifies a generated response class that can be imported. Scalar and union types use PHP type syntax and have a `null` class field. Optional object/struct requests keep their underlying DTO in `requestClass`. Names are derived from the actual generated record location, including nested and cross-module references.
+
+Run `npx skir gen` after changing a schema. No extra generator option is required to emit the manifest.
+
 ## Releasing
 
-Create a GitHub release for the version in `package.json`. The release workflow reruns type checks, build, package validation, and tests before publishing to npm with provenance. It expects an `NPM_TOKEN` repository secret.
+`@php-skir/generator-core` is a normal semver dependency of this package. Publish the required core version first, replace any local development link with that published version, update the lockfile, and verify a clean `npm ci` before releasing this adapter.
+
+Create a GitHub release for the version in `package.json`. The release workflow reruns type checks, build, package validation, and tests before publishing to npm with provenance. Configure this GitHub repository and its `release.yml` workflow as an npm trusted publisher; the workflow authenticates through OIDC and does not use a long-lived npm token.
