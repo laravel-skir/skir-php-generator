@@ -195,4 +195,4 @@ Run `npx skir gen` after changing a schema. No extra generator option is require
 
 `@php-skir/generator-core` is a normal semver dependency of this package. Publish the required core version first, replace any local development link with that published version, update the lockfile, and verify a clean `npm ci` before releasing this adapter.
 
-Create a GitHub release for the version in `package.json`. The release workflow reruns type checks, build, package validation, and tests before publishing to npm with provenance. It expects an `NPM_TOKEN` repository secret.
+Create a GitHub release for the version in `package.json`. The release workflow reruns type checks, build, package validation, and tests before publishing to npm with provenance. Configure this GitHub repository and its `release.yml` workflow as an npm trusted publisher; the workflow authenticates through OIDC and does not use a long-lived npm token.
