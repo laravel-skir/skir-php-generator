@@ -1,5 +1,11 @@
 # Skir PHP Generator
 
+[![Tests](https://github.com/php-skir/skir-php-generator/actions/workflows/tests.yml/badge.svg)](https://github.com/php-skir/skir-php-generator/actions/workflows/tests.yml)
+[![Coverage](https://raw.githubusercontent.com/php-skir/skir-php-generator/badges/coverage.svg)](https://github.com/php-skir/skir-php-generator/actions/workflows/tests.yml)
+[![npm](https://img.shields.io/npm/v/skir-php-generator?label=npm&logo=npm)](https://www.npmjs.com/package/skir-php-generator)
+[![Node.js](https://img.shields.io/badge/Node.js-22%20%7C%2024-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![License](https://img.shields.io/github/license/php-skir/skir-php-generator)](LICENSE)
+
 Generates framework-agnostic PHP data objects, RPC clients, and server procedure contracts from Skir schemas.
 
 Generated PHP uses `php-skir/runtime` for dense JSON serialization. Install `php-skir/client` when using generated RPC clients and `php-skir/server` when using generated server contracts.
