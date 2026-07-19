@@ -6,14 +6,12 @@ on:
       - published
   workflow_dispatch:
 
-permissions:
-  contents: read
-  id-token: write
-
 jobs:
-  publish:
-    name: Publish to npm
+  verify:
+    name: Verify release package
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -24,6 +22,12 @@ jobs:
         with:
           repository: php-skir/runtime
           path: runtime
+
+      - name: Checkout client
+        uses: actions/checkout@v4
+        with:
+          repository: php-skir/client
+          path: client
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -36,7 +40,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Install dependencies
@@ -54,7 +57,41 @@ jobs:
       - name: Run tests
         run: npm test
         env:
+          SKIR_CLIENT_PATH: ${{ github.workspace }}/client
           SKIR_RUNTIME_PATH: ${{ github.workspace }}/runtime
 
+      - name: Build release package
+        run: npm pack --cache .npm-cache
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: skir-php-generator-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download release package
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: package
+
       - name: Publish
-        run: npm publish --provenance --access public
+        run: npm publish package/skir-php-generator-*.tgz --provenance --access public

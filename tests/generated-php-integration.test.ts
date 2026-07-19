@@ -3,13 +3,32 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { generatePhpFiles } from "../src/generator.js";
 
+const COMPOSER_INSTALL_TIMEOUT_MS = 45_000;
+const PROCESS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const projectPaths = new Set<string>();
+
+afterEach(() => {
+  for (const projectPath of projectPaths) {
+    rmSync(projectPath, { recursive: true, force: true });
+  }
+
+  projectPaths.clear();
+});
+
+function createProject(): string {
+  const projectPath = mkdtempSync(join(tmpdir(), "skir-php-generator-"));
+  projectPaths.add(projectPath);
+
+  return projectPath;
+}
+
 describe("generated PHP", () => {
   it("round-trips dense JSON through php-skir/runtime", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "skir-php-generator-"));
+    const projectPath = createProject();
     const sourcePath = join(projectPath, "src");
     const runtimePath = process.env.SKIR_RUNTIME_PATH ?? resolve("../runtime");
 
@@ -204,7 +223,13 @@ if ($method->name !== 'GetUser' || $method->number !== 3180856469) {
     try {
       execFileSync("composer", ["install", "--no-interaction", "--no-progress"], {
         cwd: projectPath,
+        env: {
+          ...process.env,
+          COMPOSER_HOME: join(projectPath, ".composer"),
+        },
+        maxBuffer: PROCESS_MAX_BUFFER_BYTES,
         stdio: "pipe",
+        timeout: COMPOSER_INSTALL_TIMEOUT_MS,
       });
 
       execFileSync("php", ["verify.php"], {
@@ -213,6 +238,7 @@ if ($method->name !== 'GetUser' || $method->number !== 3180856469) {
       });
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
+      projectPaths.delete(projectPath);
     }
 
     expect(files.map((file) => file.path).sort()).toEqual([

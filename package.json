@@ -39,7 +39,9 @@
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run --cache .npm-cache",
+    "pretest": "npm run build",
     "test": "vitest run",
+    "test:coverage": "npm run build && vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.include=src/**/*.ts --coverage.thresholds.lines=80 --coverage.thresholds.statements=80 --coverage.thresholds.branches=75 --coverage.thresholds.functions=75",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -49,6 +51,8 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "skir": "^1.2.19",
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"

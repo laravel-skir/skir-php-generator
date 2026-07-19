@@ -62,4 +62,21 @@ describe("configure-composer CLI", () => {
     expect(result.stderr).toMatch(/conflict/i);
     expect(readFileSync(join(projectPath, "composer.json"), "utf8")).toBe(source);
   });
+
+  it.each([
+    { cliArguments: [], message: /Usage: skir-php-generator configure-composer/ },
+    { cliArguments: ["configure-composer", "--unknown"], message: /Unknown argument --unknown/ },
+    { cliArguments: ["configure-composer", "--root", "--mod"], message: /Missing value for --root/ },
+  ])("rejects invalid arguments without an uncaught stack trace", ({ cliArguments, message }) => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve("dist/cli.js"), ...cliArguments],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toMatch(message);
+    expect(result.stderr).not.toContain("at main");
+  });
 });

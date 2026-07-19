@@ -4,17 +4,36 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+const COMPOSER_INSTALL_TIMEOUT_MS = 45_000;
+const PROCESS_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const projectPaths = new Set<string>();
+
+afterEach(() => {
+  for (const projectPath of projectPaths) {
+    rmSync(projectPath, { recursive: true, force: true });
+  }
+
+  projectPaths.clear();
+});
+
+function createProject(): string {
+  const projectPath = mkdtempSync(join(tmpdir(), "skir-php-cli-"));
+  projectPaths.add(projectPath);
+
+  return projectPath;
+}
 
 describe("skir CLI integration", () => {
   it("generates executable PHP from a real .skir fixture", () => {
-    const projectPath = mkdtempSync(join(tmpdir(), "skir-php-cli-"));
+    const projectPath = createProject();
     const skirSourcePath = join(projectPath, "skir-src");
     const adminSkirSourcePath = join(skirSourcePath, "admin");
     const commonSkirSourcePath = join(skirSourcePath, "common");
-    const stubClientPath = join(projectPath, "stub-client", "Skir", "Client");
     const generatedPath = join(projectPath, "generated", "skirout");
     const runtimePath = process.env.SKIR_RUNTIME_PATH ?? resolve("../runtime");
+    const clientPath = process.env.SKIR_CLIENT_PATH ?? resolve("../client");
     const generatorPath = resolve("dist/index.js");
     const skirBinPath = resolve("node_modules/skir/dist/compiler.js");
 
@@ -23,7 +42,6 @@ describe("skir CLI integration", () => {
 
     mkdirSync(adminSkirSourcePath, { recursive: true });
     mkdirSync(commonSkirSourcePath, { recursive: true });
-    mkdirSync(stubClientPath, { recursive: true });
 
     writeFileSync(
       join(projectPath, "skir.yml"),
@@ -94,15 +112,21 @@ describe("skir CLI integration", () => {
                 symlink: false,
               },
             },
+            {
+              type: "path",
+              url: clientPath,
+              options: {
+                symlink: false,
+              },
+            },
           ],
           require: {
             php: "^8.3",
+            "php-skir/client": "*",
             "php-skir/runtime": "*",
           },
-          autoload: {
-            "psr-4": {
-              "Skir\\Client\\": "stub-client/Skir/Client/",
-            },
+          "require-dev": {
+            "phpunit/phpunit": "^10.5|^11.5|^12.5",
           },
           config: {
             "sort-packages": true,
@@ -116,30 +140,6 @@ describe("skir CLI integration", () => {
     );
 
     writeFileSync(
-      join(stubClientPath, "SkirClient.php"),
-      `<?php
-
-declare(strict_types=1);
-
-namespace Skir\\Client;
-
-use Skir\\Runtime\\MethodDescriptor;
-
-final class SkirClient
-{
-    public function invoke(MethodDescriptor $descriptor, mixed $request): mixed
-    {
-        if ($descriptor->name !== 'GetUser') {
-            throw new \\RuntimeException('Unexpected method descriptor.');
-        }
-
-        return $request;
-    }
-}
-`,
-    );
-
-    writeFileSync(
       join(projectPath, "verify.php"),
       `<?php
 
@@ -147,6 +147,9 @@ declare(strict_types=1);
 
 require __DIR__.'/vendor/autoload.php';
 
+use Saloon\\Http\\Faking\\MockClient;
+use Saloon\\Http\\Faking\\MockResponse;
+use Skir\\Client\\Http\\SkirRpcRequest as TransportRequest;
 use Skir\\Admin\\SkirMethods;
 use Skir\\Admin\\SkirRpcClient;
 use Skir\\Admin\\SubscriptionStatus;
@@ -198,12 +201,34 @@ if ($method->name !== 'GetUser' || $method->number !== 3180856469) {
     throw new RuntimeException('Unexpected method descriptor.');
 }
 
-$rpcClient = new SkirRpcClient(new TransportSkirClient());
+$transportClient = new TransportSkirClient('https://example.com');
+$mockClient = new MockClient([
+    TransportRequest::class => MockResponse::make($user->toDenseJson(), 200, [
+        'Content-Type' => 'application/json',
+    ]),
+]);
+$transportClient->withMockClient($mockClient);
+$rpcClient = new SkirRpcClient($transportClient);
 $rpcUser = $rpcClient->getUser($user);
 
 if (! $rpcUser instanceof UsersUser || $rpcUser->name !== 'John Doe') {
     throw new RuntimeException('Unexpected generated client response.');
 }
+
+$mockClient->assertSent(function (TransportRequest $request): bool {
+    return $request->resolveEndpoint() === '/'
+        && $request->body()->all() === [
+            'method' => 'GetUser',
+            'request' => [
+                400,
+                'John Doe',
+                ['Antwerp', ['2000', '2018']],
+                [['Brussels', ['1000']]],
+                [2, 1743682787000],
+                [1, [2, 1743682787000]],
+            ],
+        ];
+});
 `,
     );
 
@@ -255,7 +280,13 @@ if (! $rpcUser instanceof UsersUser || $rpcUser->name !== 'John Doe') {
 
       execFileSync("composer", ["install", "--no-interaction", "--no-progress"], {
         cwd: projectPath,
+        env: {
+          ...process.env,
+          COMPOSER_HOME: join(projectPath, ".composer"),
+        },
+        maxBuffer: PROCESS_MAX_BUFFER_BYTES,
         stdio: "pipe",
+        timeout: COMPOSER_INSTALL_TIMEOUT_MS,
       });
 
       execFileSync("php", ["verify.php"], {
@@ -264,6 +295,7 @@ if (! $rpcUser instanceof UsersUser || $rpcUser->name !== 'John Doe') {
       });
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
+      projectPaths.delete(projectPath);
     }
   }, 180_000);
 });
